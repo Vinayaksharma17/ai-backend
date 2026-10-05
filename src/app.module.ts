@@ -4,6 +4,7 @@ import { createObserveModule } from '@nestjs/observe';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 import { AiModule } from './ai/ai.module.js';
+import { ConfigModule } from '@nestjs/config';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 
@@ -36,9 +37,16 @@ const observeImports =
             ? undefined
             : {
                 target: 'pino-pretty',
-                options: { singleLine: true, colorize: true, translateTime: true },
+                options: {
+                  singleLine: true,
+                  colorize: true,
+                  translateTime: true,
+                },
               },
       },
+    }),
+    ConfigModule.forRoot({
+      isGlobal: true,
     }),
     AiModule,
     ...observeImports,
