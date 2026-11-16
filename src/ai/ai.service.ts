@@ -12,6 +12,8 @@ import { LlmProviderError } from './providers/llm-provider.error.js';
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
+  private activeRequest = 0;
+  private readonly maxConcurrentRequests = 1;
 
   constructor(
     @Inject(LLM_PROVIDER)
@@ -19,6 +21,16 @@ export class AiService {
   ) {}
 
   async generate(prompt: string): Promise<GenerateResult> {
+    if (this.activeRequest >= this.maxConcurrentRequests) {
+      this.logger.warn('AI request rejected: concurrency limit reached');
+
+      throw new ServiceUnavailableException(
+        'AI service is busy. Please try again later.',
+      );
+    }
+
+    this.activeRequest += 1;
+
     try {
       const response = await this.llmProvider.generate(prompt);
 
@@ -33,6 +45,8 @@ export class AiService {
       }
 
       throw error;
+    } finally {
+      this.activeRequest -= 1;
     }
   }
 }

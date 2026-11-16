@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AiController } from './ai.controller.js';
 import { AiService } from './ai.service.js';
+import { LLM_PROVIDER } from './providers/llm-provider.token.js';
 
 describe('AiController', () => {
   let controller: AiController;
@@ -9,7 +10,13 @@ describe('AiController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AiController],
-      providers: [AiService],
+      providers: [
+        AiService,
+        {
+          provide: LLM_PROVIDER,
+          useValue: { generate: vi.fn() },
+        },
+      ],
     }).compile();
 
     controller = module.get<AiController>(AiController);

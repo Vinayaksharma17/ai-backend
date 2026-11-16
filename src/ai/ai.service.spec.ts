@@ -46,11 +46,37 @@ describe('AiService', () => {
     );
   });
 
-  it('should propagate unexpected errors', async () => {
-    mockProvider.generate.mockRejectedValue(new Error('Unexpected failure'));
-
-    await expect(service.generate('Explain MQTT')).rejects.toThrow(
-      'Unexpected failure',
+  it('should reject a request while another is in flight', async () => {
+    let resolveFirst: (value: string) => void;
+    mockProvider.generate.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        resolveFirst = resolve;
+      }),
     );
+
+    const first = service.generate('first request');
+
+    await expect(service.generate('second request')).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+
+    resolveFirst!('first response');
+    await expect(first).resolves.toEqual({ response: 'first response' });
+
+    expect(mockProvider.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('should release the slot after a failed request', async () => {
+    mockProvider.generate
+      .mockRejectedValueOnce(new LlmProviderError('Ollama request failed'))
+      .mockResolvedValueOnce('second response');
+
+    await expect(service.generate('first request')).rejects.toThrow(
+      ServiceUnavailableException,
+    );
+
+    await expect(service.generate('second request')).resolves.toEqual({
+      response: 'second response',
+    });
   });
 });
