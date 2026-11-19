@@ -1,19 +1,17 @@
-import { Body, Controller, Post } from '@nestjs/common';
-import { AiService } from './ai.service.js';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+
 import { GeneratePromptDto } from './dto/generate-prompt.dto.js';
-import { Throttle } from '@nestjs/throttler';
+import { AiQueueService } from './queue/ai-queue.service.js';
 
 @Controller('ai')
 export class AiController {
-  constructor(private readonly aiService: AiService) {}
-  @Throttle({
-    default: {
-      limit: 5,
-      ttl: 60_000,
-    },
-  })
-  @Post('generate')
-  generate(@Body() dto: GeneratePromptDto) {
-    return this.aiService.generate(dto.prompt);
+  constructor(
+    private readonly aiQueueService: AiQueueService,
+  ) {}
+
+  @Post('jobs')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async createJob(@Body() dto: GeneratePromptDto) {
+    return this.aiQueueService.addGenerationJob(dto.prompt);
   }
 }

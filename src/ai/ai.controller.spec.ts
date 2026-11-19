@@ -1,42 +1,42 @@
 import { Test, TestingModule } from '@nestjs/testing';
+
 import { AiController } from './ai.controller.js';
-import { AiService } from './ai.service.js';
-import { LLM_PROVIDER } from './providers/llm-provider.token.js';
+import { AiQueueService } from './queue/ai-queue.service.js';
 
 describe('AiController', () => {
   let controller: AiController;
-  let aiService: AiService;
+  let queueService: { addGenerationJob: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
+    queueService = {
+      addGenerationJob: vi.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AiController],
       providers: [
-        AiService,
         {
-          provide: LLM_PROVIDER,
-          useValue: { generate: vi.fn() },
+          provide: AiQueueService,
+          useValue: queueService,
         },
       ],
     }).compile();
 
     controller = module.get<AiController>(AiController);
-    aiService = module.get<AiService>(AiService);
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('generate', () => {
-    it('delegates to the service and returns the result', async () => {
-      const generate = vi
-        .spyOn(aiService, 'generate')
-        .mockResolvedValue({ response: 'generated text' });
+  describe('createJob', () => {
+    it('submits the prompt to the queue and returns the job id', async () => {
+      queueService.addGenerationJob.mockResolvedValue({ jobId: 'job-123' });
 
-      const result = await controller.generate({ prompt: 'hello' });
+      const result = await controller.createJob({ prompt: 'hello' });
 
-      expect(generate).toHaveBeenCalledWith('hello');
-      expect(result).toEqual({ response: 'generated text' });
+      expect(queueService.addGenerationJob).toHaveBeenCalledWith('hello');
+      expect(result).toEqual({ jobId: 'job-123' });
     });
   });
 });

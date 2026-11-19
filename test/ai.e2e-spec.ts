@@ -1,15 +1,28 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module.js';
+
+import { AiController } from './../src/ai/ai.controller.js';
+import { AiQueueService } from './../src/ai/queue/ai-queue.service.js';
 
 describe('AiModule (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: INestApplication;
+  const queueService = {
+    addGenerationJob: vi.fn(),
+  };
 
   beforeEach(async () => {
+    vi.clearAllMocks();
+    queueService.addGenerationJob.mockResolvedValue({ jobId: 'job-123' });
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
+      controllers: [AiController],
+      providers: [
+        {
+          provide: AiQueueService,
+          useValue: queueService,
+        },
+      ],
     }).compile();
 
     app = moduleFixture.createNestApplication();
@@ -27,35 +40,41 @@ describe('AiModule (e2e)', () => {
     await app.close();
   });
 
-  it('/ai/generate (POST) returns a response', () => {
+  it('/ai/jobs (POST) returns an accepted job id', () => {
     return request(app.getHttpServer())
-      .post('/ai/generate')
+      .post('/ai/jobs')
       .send({ prompt: 'Explain MQTT in simple terms' })
-      .expect(201)
+      .expect(202)
       .expect(({ body }) => {
-        expect(body).toEqual({
-          response: 'Echo: Explain MQTT in simple terms',
-        });
+        expect(body).toEqual({ jobId: 'job-123' });
       });
   });
 
-  it('/ai/generate (POST) rejects a missing prompt', () => {
-    return request(app.getHttpServer())
-      .post('/ai/generate')
-      .send({})
-      .expect(400);
+  it('/ai/jobs (POST) passes the prompt to the queue', async () => {
+    await request(app.getHttpServer())
+      .post('/ai/jobs')
+      .send({ prompt: 'Explain MQTT in simple terms' })
+      .expect(202);
+
+    expect(queueService.addGenerationJob).toHaveBeenCalledWith(
+      'Explain MQTT in simple terms',
+    );
   });
 
-  it('/ai/generate (POST) rejects an empty prompt', () => {
+  it('/ai/jobs (POST) rejects a missing prompt', () => {
+    return request(app.getHttpServer()).post('/ai/jobs').send({}).expect(400);
+  });
+
+  it('/ai/jobs (POST) rejects an empty prompt', () => {
     return request(app.getHttpServer())
-      .post('/ai/generate')
+      .post('/ai/jobs')
       .send({ prompt: '' })
       .expect(400);
   });
 
-  it('/ai/generate (POST) rejects unknown properties', () => {
+  it('/ai/jobs (POST) rejects unknown properties', () => {
     return request(app.getHttpServer())
-      .post('/ai/generate')
+      .post('/ai/jobs')
       .send({ prompt: 'hello', extra: true })
       .expect(400);
   });
