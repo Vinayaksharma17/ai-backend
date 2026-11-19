@@ -46,27 +46,32 @@ describe('AiService', () => {
     );
   });
 
-  it('should reject a request while another is in flight', async () => {
-    let resolveFirst: (value: string) => void;
-    mockProvider.generate.mockReturnValueOnce(
-      new Promise<string>((resolve) => {
-        resolveFirst = resolve;
-      }),
+  it('should queue a request while another is in flight', async () => {
+    const resolvers: Array<(value: string) => void> = [];
+    mockProvider.generate.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          resolvers.push(resolve);
+        }),
     );
 
     const first = service.generate('first request');
+    const second = service.generate('second request');
 
-    await expect(service.generate('second request')).rejects.toThrow(
-      ServiceUnavailableException,
-    );
+    await vi.waitFor(() => expect(resolvers).toHaveLength(1));
+    expect(mockProvider.generate).toHaveBeenCalledTimes(1);
 
-    resolveFirst!('first response');
+    resolvers[0]('first response');
     await expect(first).resolves.toEqual({ response: 'first response' });
 
-    expect(mockProvider.generate).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(resolvers).toHaveLength(2));
+    expect(mockProvider.generate).toHaveBeenCalledTimes(2);
+
+    resolvers[1]('second response');
+    await expect(second).resolves.toEqual({ response: 'second response' });
   });
 
-  it('should release the slot after a failed request', async () => {
+  it('should continue processing the queue after a failed request', async () => {
     mockProvider.generate
       .mockRejectedValueOnce(new LlmProviderError('Ollama request failed'))
       .mockResolvedValueOnce('second response');

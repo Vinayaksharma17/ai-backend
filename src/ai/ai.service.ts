@@ -4,6 +4,8 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import PQueue from 'p-queue';
+
 import { LLM_PROVIDER } from './providers/llm-provider.token.js';
 import type { LlmProvider } from './providers/llm.provider.js';
 import { GenerateResult } from './interfaces/generate-result.interface.js';
@@ -12,8 +14,10 @@ import { LlmProviderError } from './providers/llm-provider.error.js';
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private activeRequest = 0;
   private readonly maxConcurrentRequests = 1;
+  private readonly queue = new PQueue({
+    concurrency: this.maxConcurrentRequests,
+  });
 
   constructor(
     @Inject(LLM_PROVIDER)
@@ -21,16 +25,16 @@ export class AiService {
   ) {}
 
   async generate(prompt: string): Promise<GenerateResult> {
-    if (this.activeRequest >= this.maxConcurrentRequests) {
-      this.logger.warn('AI request rejected: concurrency limit reached');
-
-      throw new ServiceUnavailableException(
-        'AI service is busy. Please try again later.',
+    if (this.queue.size > 0) {
+      this.logger.debug(
+        `Queueing AI request (${this.queue.size} waiting, ${this.queue.pending} running)`,
       );
     }
 
-    this.activeRequest += 1;
+    return this.queue.add(() => this.run(prompt));
+  }
 
+  private async run(prompt: string): Promise<GenerateResult> {
     try {
       const response = await this.llmProvider.generate(prompt);
 
@@ -45,8 +49,6 @@ export class AiService {
       }
 
       throw error;
-    } finally {
-      this.activeRequest -= 1;
     }
   }
 }
